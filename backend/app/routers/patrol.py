@@ -1,6 +1,7 @@
 """巡查任务接口：维护巡查单，覆盖派发巡查、提交结果、作废巡查等动作。"""
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
@@ -16,6 +17,16 @@ LIST_FIELDS = ["巡查单号", "巡查路线", "巡查人员", "巡查日期", "
 STATUSES = ["待派发", "巡查中", "已提交", "已作废"]
 
 
+def _parse_range(value: str | None, label: str) -> date | None:
+    """日期范围只接受 YYYY-MM-DD；格式不对时给出可读提示，不静默忽略。"""
+    if value is None or not value.strip():
+        return None
+    try:
+        return date.fromisoformat(value.strip())
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"{label}格式应为 YYYY-MM-DD，收到的是「{value}」")
+
+
 @router.get("", response_model=PageResult[dict])
 def list_entries(
     keyword: str | None = Query(default=None, description="按巡查单号检索"),
@@ -28,6 +39,29 @@ def list_entries(
         raise HTTPException(status_code=400, detail="每页最多 200 条，请缩小分页范围")
     items, total = service.list_entries(keyword=keyword, status=status, page=page, size=size)
     return PageResult(items=items, total=total, page=page, size=size)
+
+
+@router.get("/distribution")
+def distribution_overview(
+    start: str | None = Query(default=None, description="起始日期 YYYY-MM-DD，含当天"),
+    end: str | None = Query(default=None, description="截止日期 YYYY-MM-DD，含当天"),
+) -> dict[str, Any]:
+    """巡查问题分布概览：按路线与人员汇总问题数、已提交、作废单与平均里程。
+
+    注意要注册在 /{entry_id} 之前，否则 "distribution" 会被当成巡查单 id 匹配走。
+    """
+    start_day = _parse_range(start, "起始日期")
+    end_day = _parse_range(end, "截止日期")
+    if start_day and end_day and start_day > end_day:
+        raise HTTPException(status_code=400, detail="起始日期不能晚于截止日期，请调整日期范围")
+    return service.distribution(start=start_day, end=end_day)
+
+
+@router.get("/export")
+def export_entries() -> dict[str, Any]:
+    """导出巡查任务清单：返回当前过滤条件下的全量数据。需注册在 /{entry_id} 之前，否则会被当成单号 id。"""
+    items, total = service.list_entries(page=1, size=10000)
+    return {"module": "patrol", "total": total, "items": items}
 
 
 @router.get("/{entry_id}", response_model=dict)
@@ -56,10 +90,3 @@ def run_action(entry_id: int, payload: EntryPayload) -> ActionResult:
     if entry is None:
         return ActionResult(ok=False, message=message)
     return ActionResult(ok=True, message=message, entry=entry)
-
-
-@router.get("/export")
-def export_entries() -> dict[str, Any]:
-    """导出巡查任务清单：返回当前过滤条件下的全量数据。"""
-    items, total = service.list_entries(page=1, size=10000)
-    return {"module": "patrol", "total": total, "items": items}

@@ -5,6 +5,7 @@ const Road = () => import('@/views/road/index.vue')
 const Bridge = () => import('@/views/bridge/index.vue')
 const Tunnel = () => import('@/views/tunnel/index.vue')
 const Patrol = () => import('@/views/patrol/index.vue')
+const PatrolDistribution = () => import('@/views/patrol/distribution.vue')
 const Disease = () => import('@/views/disease/index.vue')
 const Assess = () => import('@/views/assess/index.vue')
 const Plan = () => import('@/views/plan/index.vue')
@@ -28,6 +29,7 @@ const router = createRouter({
     { path: '/bridge', name: 'bridge', component: Bridge },
     { path: '/tunnel', name: 'tunnel', component: Tunnel },
     { path: '/patrol', name: 'patrol', component: Patrol },
+    { path: '/patrol/distribution', name: 'patrol-distribution', component: PatrolDistribution },
     { path: '/disease', name: 'disease', component: Disease },
     { path: '/assess', name: 'assess', component: Assess },
     { path: '/plan', name: 'plan', component: Plan },
