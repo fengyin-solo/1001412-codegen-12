@@ -7,6 +7,7 @@
       </div>
       <div class="page-actions">
         <button class="btn primary" type="button" @click="openCreate">登记巡查单</button>
+        <button class="btn" type="button" @click="goOverview">问题分布概览</button>
         <button class="btn" type="button" @click="exportRows">导出巡查任务清单</button>
       </div>
     </header>
@@ -64,6 +65,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 
 import { request } from '@/api/client'
 
@@ -80,6 +82,11 @@ const total = ref(0)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
 const filterFields = columns.slice(0, 3)
+const router = useRouter()
+
+function goOverview() {
+  void router.push('/patrol/overview')
+}
 
 function resetFilters() {
   filters.value = {}
@@ -99,7 +106,7 @@ async function runAction(action: string, row: Row) {
   try {
     const response = await request(`${ENDPOINT}/${row.id}/actions`, {
       method: 'POST',
-      body: JSON.stringify({ action }),
+      body: JSON.stringify({ values: { action } }),
     })
     if (!response.ok) {
       throw new Error('巡查任务动作未生效，请稍后重试')

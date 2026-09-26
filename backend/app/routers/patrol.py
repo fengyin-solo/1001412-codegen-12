@@ -1,6 +1,7 @@
 """巡查任务接口：维护巡查单，覆盖派发巡查、提交结果、作废巡查等动作。"""
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
@@ -14,6 +15,15 @@ service = PatrolService()
 
 LIST_FIELDS = ["巡查单号", "巡查路线", "巡查人员", "巡查日期", "巡查里程", "发现问题数", "巡查时长", "巡查状态"]
 STATUSES = ["待派发", "巡查中", "已提交", "已作废"]
+DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _check_date_param(value: str | None, label: str) -> None:
+    """日期范围参数必须是 YYYY-MM-DD，格式不对直接说明，不静默忽略。"""
+    if value is None:
+        return
+    if not DATE_PATTERN.match(value.strip()):
+        raise HTTPException(status_code=400, detail=f"{label}格式应为 YYYY-MM-DD，收到的是「{value}」")
 
 
 @router.get("", response_model=PageResult[dict])
@@ -28,6 +38,28 @@ def list_entries(
         raise HTTPException(status_code=400, detail="每页最多 200 条，请缩小分页范围")
     items, total = service.list_entries(keyword=keyword, status=status, page=page, size=size)
     return PageResult(items=items, total=total, page=page, size=size)
+
+
+@router.get("/stats")
+def stats_overview(
+    start: str | None = Query(default=None, description="起始日期，YYYY-MM-DD"),
+    end: str | None = Query(default=None, description="结束日期，YYYY-MM-DD"),
+) -> dict[str, Any]:
+    """巡查问题分布概览：按路线与人员统计问题数、已提交/作废单与平均里程。
+
+    同一巡查单只统计一次；作废单不计入问题数但单独列出；问题数为零的单子不进异常统计。
+    注意要注册在 /{entry_id} 之前，否则会被动态路由当成单号截获。
+    """
+    _check_date_param(start, "起始日期")
+    _check_date_param(end, "结束日期")
+    return service.stats_overview(start=start, end=end)
+
+
+@router.get("/export")
+def export_entries() -> dict[str, Any]:
+    """导出巡查任务清单：返回当前过滤条件下的全量数据。"""
+    items, total = service.list_entries(page=1, size=10000)
+    return {"module": "patrol", "total": total, "items": items}
 
 
 @router.get("/{entry_id}", response_model=dict)
@@ -56,10 +88,3 @@ def run_action(entry_id: int, payload: EntryPayload) -> ActionResult:
     if entry is None:
         return ActionResult(ok=False, message=message)
     return ActionResult(ok=True, message=message, entry=entry)
-
-
-@router.get("/export")
-def export_entries() -> dict[str, Any]:
-    """导出巡查任务清单：返回当前过滤条件下的全量数据。"""
-    items, total = service.list_entries(page=1, size=10000)
-    return {"module": "patrol", "total": total, "items": items}
